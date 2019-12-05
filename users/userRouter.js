@@ -1,6 +1,7 @@
 const express = require('express');
 
 const Users = require('./userDb');
+const Posts = require('../posts/postDb');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/', (req, res) => {
 });
 
 // GET      >>>     Working
-router.get('/:id', (req, res) => {
+router.get('/:id', validateUserId, (req, res) => {
   Users.getById(req.params.id)
   .then(user => {
     if (user) {
@@ -38,7 +39,7 @@ router.get('/:id', (req, res) => {
 });
 
 // GET-sub      >>>     Working
-router.get('/:id/posts', (req, res) => {
+router.get('/:id/posts', validateUserId, (req, res) => {
   Users.getUserPosts(req.params.id)
   .then(posts => {
     if (posts) {
@@ -57,7 +58,7 @@ router.get('/:id/posts', (req, res) => {
 });
 
 //    POST      >>>     Working
-router.post('/', (req, res) => {
+router.post('/', validateUser, (req, res) => {
   Users.insert(req.body)
   .then(user => {
     if (user) {
@@ -75,11 +76,11 @@ router.post('/', (req, res) => {
   })
 });
 
-//    POST      >>>     FIX && TEST
-router.post('/:id/posts', (req, res) => {
-  const {text} = req.body
+//    POST      >>>     Working
+router.post('/:id/posts', validateUserId, validatePost, (req, res) => {
+  const text = req.body
   if (text) {
-    Users.insert(req.body)
+    Posts.insert(req.body)
     .then(post => {
       if (post) {
         res.status(201)
@@ -101,7 +102,7 @@ router.post('/:id/posts', (req, res) => {
 });
 
 //        PUT      >>>     Working
-router.put('/:id', (req, res) => {
+router.put('/:id', validateUserId, (req, res) => {
   const changes = req.body
   const {name} = req.body
   if (name) {
@@ -126,7 +127,7 @@ router.put('/:id', (req, res) => {
 });
 
 //            DELETE      >>>     Working
-router.delete('/:id', (req, res) => {
+router.delete('/:id', validateUserId, (req, res) => {
   Users.remove(req.params.id)
   .then(count => {
     if (count > 0) {
@@ -147,33 +148,51 @@ router.delete('/:id', (req, res) => {
 
 //custom middleware
 function validateUserId(req, res, next) {
-  const id = req.headers.id
-  if (id && id === 123) {
-    next()
-  } else {
-    res.status(401)
-      .json({ message: 'You shall not pass!' })
-  };
-};
-
-function validateUser(role) {
-  return function (req, res, next) {
-    if (role && role === req.headers.role) {
+  Users.getById(req.params.id)
+  .then(res => {
+    if (res) {
+      req.user = res
       next()
     } else {
-      res.status(403)
-        .json({ message: 'You do not have clearence' })
-    }
-  };
-}
-// *********NEEDS TO BE WRITTEN STILL****************
-function validatePost(req, res, next) {
+      res.status(404)
+        .json({ message: 'You shall not pass!' })
+    };
+  })
+  .catch(err => {
+    console.log('Error with validateUserId middleware')
+    res.status(500)
+      .json({ message: 'Error obtaining user ID' })
+  })
+};
 
-}
+function validateUser(req, res, next) {
+  if (!req.body) {
+    res.status(400)
+      .json({ message: 'Missing user data' })
+  } else if (!req.body.name) {
+    res.status(400)
+      .json({ message: 'missing required name field' })
+  } else {
+    req.user = req.body
+    next()
+  }
+};
+
+function validatePost(req, res, next) {
+  if (!req.body) {
+    res.status(400)
+      .json({ message: 'Missing post data' })
+  } else if (!req.body.text) {
+    res.status(400)
+      .json({ message: 'missing required text field' })
+  } else {
+    next()
+  }
+};
 
 // middleware
-router.use(validateUser());
-router.use(validateUserId);
+// router.use(validateUser());
+// router.use(validateUserId);
 router.use(validatePost);
 
 module.exports = router;
